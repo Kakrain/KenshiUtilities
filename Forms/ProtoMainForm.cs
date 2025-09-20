@@ -111,7 +111,7 @@ namespace KenshiUtilities
 
             _ = InitializeAsync();
         }
-        protected void RunWithProgress<T>(IEnumerable<T> items, Action<T, int, int> action)
+        /*protected void RunWithProgress<T>(IEnumerable<T> items, Action<T, int, int> action)
         {
             if (progressBar == null || progressLabel == null) return;
 
@@ -132,7 +132,29 @@ namespace KenshiUtilities
             }
 
             progressLabel.Text = "Done!";
-        }
+        }*/
+        protected void RunWithProgress<T1, T2>(IEnumerable<(T1, T2)> pairs,Action<T1, T2, int, int> action)
+        {
+            int total = pairs.Count();
+            progressBar.Minimum = 0;
+            progressBar.Maximum = total;
+            progressBar.Value = 0;
+
+            int index = 0;
+            foreach (var (first, second) in pairs)
+            {
+                action(first, second, index, total);
+
+                progressBar.Value = index + 1;
+                progressLabel.Text = $"Processing {index + 1}/{total}";
+                progressLabel.Refresh();
+                Application.DoEvents();
+
+                index++;
+            }
+
+            progressLabel.Text = "Done!";
+         }
         protected virtual void SetupColumns() { }
 
         protected void AddButton(string text, EventHandler onClick)
