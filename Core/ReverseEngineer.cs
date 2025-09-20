@@ -6,7 +6,7 @@ using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Text.Json;
 
-namespace KenshiTranslator.Helper
+namespace KenshiUtilities.Core
 {
     public class ReverseEngineer
     {
