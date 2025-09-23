@@ -1,5 +1,6 @@
 ﻿using KenshiCore;
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -67,8 +68,8 @@ namespace KenshiUtilities
 
         private const string ConflictFileCachepath = "conflict_cache_file.txt";
         private const string ConflictModCachepath = "conflict_cache_mod.txt";
-        private Dictionary<ModItem, ReverseEngineer>? lookupEngineers = null;
-
+        private Dictionary<ModItem, ModAnalysis>? lookupModAnalysis = null;
+        private Dictionary<ModItem, HashSet<string>>? lookupFiles = null;
         public MainForm()
         {
             Text = "Kenshi Utilities";
@@ -145,6 +146,11 @@ namespace KenshiUtilities
             var totalPairs = mods.Count * (mods.Count - 1) / 2;
             progressBar.Minimum = 0;
             progressBar.Maximum = totalPairs;
+            if (lookupFiles == null)
+            {
+                lookupFiles = mods.ToDictionary(m => m, m => new HashSet<string>(GetAllFiles(m)));
+            }
+
             await Task.Run(() => BuildConflictCache(conflictFileCache, ConflictFileCachepath, mods, GetOverlappingFiles));
             ModsListView_SelectedIndexChanged(null, null);
         }
@@ -155,13 +161,9 @@ namespace KenshiUtilities
             progressBar.Minimum = 0;
             progressBar.Maximum = totalPairs;
 
-            if (lookupEngineers == null)
+            if (lookupModAnalysis == null)
             {
-                lookupEngineers = mods.ToDictionary(m => m, m => {
-                    var re = new ReverseEngineer();
-                    re.LoadModFile(m.getModFilePath()!);
-                    return re;
-                });
+                lookupModAnalysis = mods.ToDictionary(m => m, m => new ModAnalysis(m));
             }
             await Task.Run(() => BuildConflictCache(conflictModCache, ConflictModCachepath, mods, GetOverlappingMods));
             ModsListView_SelectedIndexChanged(null, null);
@@ -233,16 +235,16 @@ namespace KenshiUtilities
 
         private void BuildConflictCache(Dictionary<(string, string), List<string>> cache, string path, List<ModItem> mods, Func<ModItem, ModItem, List<string>> func)
         {
-            var newCache = new Dictionary<(string, string), List<string>>();
+            var newCache = new ConcurrentDictionary<(string, string), List<string>>();
             int processed = 0;
-            
-            for (int i = 0; i < mods.Count; i++)
+
+            Parallel.For(0, mods.Count, i =>
             {
                 for (int j = i + 1; j < mods.Count; j++)
                 {
                     var mod1 = mods[i];
                     var mod2 = mods[j];
-                    ReportProgress(processed, $"processing {mod1.Name} vs {mod2.Name}");
+                    
                     var overlap = func(mod1, mod2);
 
                     if (overlap.Count > 0)
@@ -254,33 +256,52 @@ namespace KenshiUtilities
 
                         newCache[key] = overlap;
                     }
-                    processed++;
-                    
+                    int done = Interlocked.Increment(ref processed);
+                    if (done % 100 == 0)
+                        ReportProgress(done, $"processing {mod1.Name} vs {mod2.Name}");
+
                 }
-            }
+            });
             ReportProgress(processed, $"Finished");
             cache.Clear();
             foreach (var kvp in newCache)
+            {
                 cache[kvp.Key] = kvp.Value;
+            }
             SaveConflictCache(cache, path);
         }
         private List<string> GetOverlappingFiles(ModItem modA, ModItem modB)
         {
-            var files1 = new HashSet<string>(GetAllFiles(modA));
-            return GetAllFiles(modB).Where(f => files1.Contains(f)).ToList();
+            var smaller = lookupFiles![modA];
+            var larger = lookupFiles[modB];
+
+            // Always iterate the smaller set
+            if (smaller.Count > larger.Count)
+            {
+                var tmp = smaller;
+                smaller = larger;
+                larger = tmp;
+            }
+
+            var overlap = new List<string>();
+            foreach (var f in smaller)
+            {
+                if (larger.Contains(f))
+                    overlap.Add(f);
+            }
+            return overlap;
         }
         private List<string> GetOverlappingMods(ModItem modA, ModItem modB)
         {
-            ReverseEngineer A = lookupEngineers![modA];
-            ReverseEngineer B = lookupEngineers![modB];
+            ModAnalysis A = lookupModAnalysis![modA];
+            ModAnalysis B = lookupModAnalysis![modB];
 
-            var bLookup = B.modData.Records!.ToDictionary(rb => rb.StringId, rb => rb);
 
             var overlaps = new List<string>();
 
-            foreach (var ra in A.modData.Records!)
+            foreach (var ra in A.Engineer.modData.Records!)
             {
-                if (bLookup.TryGetValue(ra.StringId, out var rb))
+                if (B.RecordLookup.TryGetValue(ra.StringId,out var rb))
                 {
                     overlaps.Add(
                         $"{ra.Name}|{ra.StringId}|" +
