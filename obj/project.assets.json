@@ -1,11 +1,33 @@
 {
   "version": 3,
   "targets": {
-    "net9.0-windows7.0": {}
+    "net9.0-windows7.0": {
+      "KenshiCore/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v9.0",
+        "compile": {
+          "bin/placeholder/KenshiCore.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/KenshiCore.dll": {}
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App.WindowsForms"
+        ]
+      }
+    }
   },
-  "libraries": {},
+  "libraries": {
+    "KenshiCore/1.0.0": {
+      "type": "project",
+      "path": "../KenshiCore/KenshiCore.csproj",
+      "msbuildProject": "../KenshiCore/KenshiCore.csproj"
+    }
+  },
   "projectFileDependencyGroups": {
-    "net9.0-windows7.0": []
+    "net9.0-windows7.0": [
+      "KenshiCore >= 1.0.0"
+    ]
   },
   "packageFolders": {
     "C:\\Users\\davba\\.nuget\\packages\\": {},
@@ -14,11 +36,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\davba\\OneDrive\\Escritorio\\net_misc\\KenshiUtilities\\KenshiUtilities.csproj",
+      "projectUniqueName": "C:\\Users\\davba\\OneDrive\\Escritorio\\net_misc\\KenshiProjects\\KenshiUtilities\\KenshiUtilities.csproj",
       "projectName": "KenshiUtilities",
-      "projectPath": "C:\\Users\\davba\\OneDrive\\Escritorio\\net_misc\\KenshiUtilities\\KenshiUtilities.csproj",
+      "projectPath": "C:\\Users\\davba\\OneDrive\\Escritorio\\net_misc\\KenshiProjects\\KenshiUtilities\\KenshiUtilities.csproj",
       "packagesPath": "C:\\Users\\davba\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\davba\\OneDrive\\Escritorio\\net_misc\\KenshiUtilities\\obj\\",
+      "outputPath": "C:\\Users\\davba\\OneDrive\\Escritorio\\net_misc\\KenshiProjects\\KenshiUtilities\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -38,7 +60,11 @@
       "frameworks": {
         "net9.0-windows7.0": {
           "targetAlias": "net9.0-windows",
-          "projectReferences": {}
+          "projectReferences": {
+            "C:\\Users\\davba\\OneDrive\\Escritorio\\net_misc\\KenshiProjects\\KenshiCore\\KenshiCore.csproj": {
+              "projectPath": "C:\\Users\\davba\\OneDrive\\Escritorio\\net_misc\\KenshiProjects\\KenshiCore\\KenshiCore.csproj"
+            }
+          }
         }
       },
       "warningProperties": {
