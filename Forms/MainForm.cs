@@ -67,7 +67,7 @@ namespace KenshiUtilities
 
         private const string ConflictFileCachepath = "conflict_cache_file.txt";
         private const string ConflictModCachepath = "conflict_cache_mod.txt";
-        private Dictionary<ModItem, ReverseEngineer> lookupEngineers = null;
+        private Dictionary<ModItem, ReverseEngineer>? lookupEngineers = null;
 
         public MainForm()
         {
@@ -124,9 +124,9 @@ namespace KenshiUtilities
                 modConflictIndicator.Invalidate();
             }
         }
-        private void ModsListView_SelectedIndexChanged(object? sender, EventArgs e)
+        private void ModsListView_SelectedIndexChanged(object? sender, EventArgs? e)
         {
-            generalLog.Clear();
+            generalLog!.Clear();
             string file_conflicts = ShowFileConflictsForSelectedMod(conflictFileCache, fileConflictIndicator);
             LogMessage(file_conflicts);
             string mod_conflicts = ShowFileConflictsForSelectedMod(conflictModCache, modConflictIndicator);
@@ -135,22 +135,22 @@ namespace KenshiUtilities
         }
         public string[] GetAllFiles(ModItem mod)
         {
-            string modpath = Path.GetDirectoryName(mod.getModFilePath());
+            string modpath = Path.GetDirectoryName(mod.getModFilePath())!;
             return Directory.GetFiles(modpath, "*.*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(modpath, f)).ToArray();
         }
         
         private async void SeekFileConflictsButton_Click(object? sender, EventArgs e)
         {
-            var mods = modsListView.Items.Cast<ListViewItem>().Select(item => (ModItem)item.Tag).ToList();
+            var mods = modsListView.Items.Cast<ListViewItem>().Select(item => (ModItem)item.Tag!).ToList();
             var totalPairs = mods.Count * (mods.Count - 1) / 2;
             progressBar.Minimum = 0;
             progressBar.Maximum = totalPairs;
             await Task.Run(() => BuildConflictCache(conflictFileCache, ConflictFileCachepath, mods, GetOverlappingFiles));
-            ModsListView_SelectedIndexChanged(null,null);
+            ModsListView_SelectedIndexChanged(null, null);
         }
         private async void SeekModConflictsButton_Click(object? sender, EventArgs e)
         {
-            var mods = modsListView.Items.Cast<ListViewItem>().Select(item => (ModItem)item.Tag).ToList();
+            var mods = modsListView.Items.Cast<ListViewItem>().Select(item => (ModItem)item.Tag!).ToList();
             var totalPairs = mods.Count * (mods.Count - 1) / 2;
             progressBar.Minimum = 0;
             progressBar.Maximum = totalPairs;
@@ -159,7 +159,7 @@ namespace KenshiUtilities
             {
                 lookupEngineers = mods.ToDictionary(m => m, m => {
                     var re = new ReverseEngineer();
-                    re.LoadModFile(m.getModFilePath());
+                    re.LoadModFile(m.getModFilePath()!);
                     return re;
                 });
             }
@@ -271,14 +271,14 @@ namespace KenshiUtilities
         }
         private List<string> GetOverlappingMods(ModItem modA, ModItem modB)
         {
-            ReverseEngineer A = lookupEngineers[modA];
-            ReverseEngineer B = lookupEngineers[modB];
+            ReverseEngineer A = lookupEngineers![modA];
+            ReverseEngineer B = lookupEngineers![modB];
 
-            var bLookup = B.modData.Records.ToDictionary(rb => rb.StringId, rb => rb);
+            var bLookup = B.modData.Records!.ToDictionary(rb => rb.StringId, rb => rb);
 
             var overlaps = new List<string>();
 
-            foreach (var ra in A.modData.Records)
+            foreach (var ra in A.modData.Records!)
             {
                 if (bLookup.TryGetValue(ra.StringId, out var rb))
                 {
