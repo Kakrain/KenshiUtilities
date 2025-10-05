@@ -190,6 +190,7 @@ namespace KenshiUtilities
 
             await Task.Run(() => BuildConflictCache(conflictFileCache, ConflictFileCachepath, mods, GetOverlappingFiles));
             ModsListView_SelectedIndexChanged(null, null);
+            TryInitialize();
         }
         private async void SeekModConflictsButton_Click(object? sender, EventArgs e)
         {
@@ -205,6 +206,7 @@ namespace KenshiUtilities
             //await Task.Run(() => BuildConflictCache(conflictModCache, ConflictModCachepath, mods, GetOverlappingMods));
             await Task.Run(() => BuildConflictCache(conflictModCache, ConflictModCachepath, mods, conflictFunc));
             ModsListView_SelectedIndexChanged(null, null);
+            TryInitialize();
         }
         
         private void ShowConflictsForSelectedMod(Dictionary<(string, string), List<string>> conflictCache, ConflictIndicatorPanel conflict_panel,Color main,Color secondary)
