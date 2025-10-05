@@ -2,6 +2,7 @@
 bin/
 obj/
 out/
+obj\
 
 # Visual Studio user-specific files
 .vs/
@@ -18,3 +19,7 @@ out/
 *.bak
 *.swp
 *~
+*.cache
+*.json
+*.props
+*.json

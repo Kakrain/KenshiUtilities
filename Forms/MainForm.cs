@@ -77,6 +77,9 @@ namespace KenshiUtilities
             AddButton("Refresh File Overrides", SeekFileConflictsButton_Click);
             AddButton("Refresh Mod Overrides", SeekModConflictsButton_Click);
 
+            // Clear whatever ProtoMainForm added
+            //listHost.Controls.Clear();
+
             var listContainer = new Panel{Dock = DockStyle.Fill};
             listContainer.Controls.Add(modsListView);
             modsListView.Dock = DockStyle.Fill;
@@ -105,14 +108,16 @@ namespace KenshiUtilities
 
             listContainer.Controls.Add(fileConflictIndicator);
             listContainer.Controls.Add(modConflictIndicator);
-            mainlayout.Controls.Add(listContainer, 0, 1);
+            listHost.Controls.Add(listContainer);
 
-            
             this.Resize += MainForm_Resize;
             conflictFileCache=LoadConflictCache(ConflictFileCachepath);
             conflictModCache=LoadConflictCache(ConflictModCachepath);
             modsListView.SelectedIndexChanged += ModsListView_SelectedIndexChanged;
-            EnableConsoleLog();
+
+            AddColumn("File Overlaps", mod => getNumberFileOverlaps(mod));
+            AddColumn("Mod Record Override", mod => getNumberRecordOverride(mod));
+
         }
         private void MainForm_Resize(object? sender, EventArgs e)
         {
@@ -125,13 +130,46 @@ namespace KenshiUtilities
                 modConflictIndicator.Invalidate();
             }
         }
+        private int getNumberFileOverlaps(ModItem mod)
+        {
+            if (mod == null) return -1;
+            int totalConflicts = 0;
+            foreach (var kvp in conflictFileCache)
+            {
+                var (modA, modB) = kvp.Key;
+                var conflicts = kvp.Value;
+                if (conflicts == null || conflicts.Count == 0) continue;
+
+                if (mod.Name.Equals(modA) || mod.Name.Equals(modB))
+                {
+                    totalConflicts += conflicts.Count;
+                }
+            }
+
+            return totalConflicts;
+        }
+
+        private int getNumberRecordOverride(ModItem mod)
+        {
+            if (mod == null) return -1;
+            int total = 0;
+            foreach (var kvp in conflictModCache)
+            {
+                var (mod1, mod2) = kvp.Key;
+                var conflicts = kvp.Value;
+
+                if (mod.Name == mod1 || mod.Name == mod2)
+                {
+                    total += conflicts?.Count ?? 0;
+                }
+            }
+            return total;
+        }
         private void ModsListView_SelectedIndexChanged(object? sender, EventArgs? e)
         {
-            generalLog!.Clear();
-            string file_conflicts = ShowFileConflictsForSelectedMod(conflictFileCache, fileConflictIndicator);
-            LogMessage(file_conflicts);
-            string mod_conflicts = ShowFileConflictsForSelectedMod(conflictModCache, modConflictIndicator);
-            LogMessage(mod_conflicts);
+            getLogForm().Reset();
+            ShowConflictsForSelectedMod(conflictFileCache, fileConflictIndicator,Color.Yellow,Color.LightYellow);
+            ShowConflictsForSelectedMod(conflictModCache, modConflictIndicator,Color.Red, Color.IndianRed);
             modsListView.Refresh();
         }
         public string[] GetAllFiles(ModItem mod)
@@ -144,8 +182,7 @@ namespace KenshiUtilities
         {
             var mods = modsListView.Items.Cast<ListViewItem>().Select(item => (ModItem)item.Tag!).ToList();
             var totalPairs = mods.Count * (mods.Count - 1) / 2;
-            progressBar.Minimum = 0;
-            progressBar.Maximum = totalPairs;
+            InitializeProgress(0, totalPairs);
             if (lookupFiles == null)
             {
                 lookupFiles = mods.ToDictionary(m => m, m => new HashSet<string>(GetAllFiles(m)));
@@ -158,39 +195,47 @@ namespace KenshiUtilities
         {
             var mods = modsListView.Items.Cast<ListViewItem>().Select(item => (ModItem)item.Tag!).ToList();
             var totalPairs = mods.Count * (mods.Count - 1) / 2;
-            progressBar.Minimum = 0;
-            progressBar.Maximum = totalPairs;
+            InitializeProgress(0, totalPairs);
 
             if (lookupModAnalysis == null)
             {
                 lookupModAnalysis = mods.ToDictionary(m => m, m => new ModAnalysis(m));
             }
-            await Task.Run(() => BuildConflictCache(conflictModCache, ConflictModCachepath, mods, GetOverlappingMods));
+            Func<ModItem, ModItem, List<string>> conflictFunc = (modA, modB) => ModAnalysis.GetConflictingRecords(lookupModAnalysis![modA], lookupModAnalysis![modB]);
+            //await Task.Run(() => BuildConflictCache(conflictModCache, ConflictModCachepath, mods, GetOverlappingMods));
+            await Task.Run(() => BuildConflictCache(conflictModCache, ConflictModCachepath, mods, conflictFunc));
             ModsListView_SelectedIndexChanged(null, null);
         }
         
-        private string ShowFileConflictsForSelectedMod(Dictionary<(string, string), List<string>> conflictCache, ConflictIndicatorPanel conflict_panel)
+        private void ShowConflictsForSelectedMod(Dictionary<(string, string), List<string>> conflictCache, ConflictIndicatorPanel conflict_panel,Color main,Color secondary)
         {
             if (modsListView.SelectedItems.Count == 0)
-                return "";
-
+                return;
+            
             var selectedMod = getSelectedMod();
             var conflictIndices = new List<int>();
-            
-            StringBuilder msgs = new StringBuilder();
+            var logForm = getLogForm();
+
+            modsListView.BeginUpdate();
+            var blocks = new List<(string, Color)>();
             foreach (ListViewItem item in modsListView.Items)
             {
+                string mod1 = selectedMod.Name;
+                string mod2 = item.Text;
+                var key = mod1.CompareTo(mod2) < 0 ? (mod1, mod2) : (mod2, mod1);
                 if (item.Text == selectedMod.Name) continue;
 
-                if (conflictCache.TryGetValue((selectedMod.Name, item.Text), out var overlap))
+                if (conflictCache.TryGetValue(key, out var overlap))
                 {
-                    item.ForeColor = overlap.Count > 0 ? Color.Red : Color.Black;
-                    if (overlap.Count > 0) { 
+                    bool hasConflict = overlap.Count > 0;
+                    item.ForeColor = hasConflict ? Color.Red : Color.Black;
+                    if (hasConflict) { 
                         conflictIndices.Add(item.Index);
-                        msgs.Append($"[{selectedMod.Name}] vs [{item.Text}]\r\n");
-                        foreach (var file in overlap)
-                            msgs.Append($"   {file}\r\n");
-                        msgs.Append($"\r\n");
+                        blocks.Add(($"[{selectedMod.Name}] vs [{item.Text}]", main));
+                        var sb = new StringBuilder();
+                        foreach (var ov in overlap)
+                            sb.AppendLine($"{ov}");
+                        blocks.Add((sb.ToString(), secondary));
                     }
                 }
                 else
@@ -198,8 +243,9 @@ namespace KenshiUtilities
                     item.ForeColor = Color.Black;
                 }
             }
+            logForm.LogBlocks(blocks);
+            modsListView.EndUpdate();
             conflict_panel.UpdateConflicts(conflictIndices, modsListView.Items.Count);
-            return msgs.ToString();
             
         }
         
@@ -290,27 +336,6 @@ namespace KenshiUtilities
                     overlap.Add(f);
             }
             return overlap;
-        }
-        private List<string> GetOverlappingMods(ModItem modA, ModItem modB)
-        {
-            ModAnalysis A = lookupModAnalysis![modA];
-            ModAnalysis B = lookupModAnalysis![modB];
-
-
-            var overlaps = new List<string>();
-
-            foreach (var ra in A.Engineer.modData.Records!)
-            {
-                if (B.RecordLookup.TryGetValue(ra.StringId,out var rb))
-                {
-                    overlaps.Add(
-                        $"{ra.Name}|{ra.StringId}|" +
-                        $"[{ra.getModType()}|{ra.getChangeType()}] " +
-                        $"vs [{rb.getModType()}|{rb.getChangeType()}]"
-                    );
-                }
-            }
-            return overlaps;
         }
     }
 }
