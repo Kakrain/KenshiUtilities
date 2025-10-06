@@ -66,6 +66,8 @@ namespace KenshiUtilities
         private Dictionary<(string, string), List<string>> conflictFileCache = new();
         private Dictionary<(string, string), List<string>> conflictModCache = new();
 
+        private Dictionary<ModItem, ModItemUtility> ModUtilitiesCache = new();
+
         private const string ConflictFileCachepath = "conflict_cache_file.txt";
         private const string ConflictModCachepath = "conflict_cache_mod.txt";
         private Dictionary<ModItem, ModAnalysis>? lookupModAnalysis = null;
@@ -76,7 +78,9 @@ namespace KenshiUtilities
             setColors(Color.SteelBlue, Color.SkyBlue);
             AddButton("Refresh File Overrides", SeekFileConflictsButton_Click);
             AddButton("Refresh Mod Overrides", SeekModConflictsButton_Click);
+            this.Width = 1000;
 
+            
             // Clear whatever ProtoMainForm added
             //listHost.Controls.Clear();
 
@@ -117,7 +121,28 @@ namespace KenshiUtilities
 
             AddColumn("File Overlaps", mod => getNumberFileOverlaps(mod));
             AddColumn("Mod Record Override", mod => getNumberRecordOverride(mod));
-
+            AddColumn("is Workshop newer?", mod => getVersions(mod));
+            AddButton("Refresh Versions", SeekModVersions_Click);
+        }
+        protected override async void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            await OnShownAsync(e);
+        }
+        private async Task OnShownAsync(EventArgs e)
+        {
+            if (InitializationTask != null)
+                await InitializationTask;
+            foreach (var mod in mergedMods)
+            {
+                ModUtilitiesCache[mod.Value] = new ModItemUtility(mod.Value);
+            }
+        }
+        private string getVersions(ModItem mod)
+        {
+            if (ModUtilitiesCache.ContainsKey(mod))
+                return ModUtilitiesCache[mod].getVersionString();
+            return "_|_";
         }
         private void MainForm_Resize(object? sender, EventArgs e)
         {
@@ -176,6 +201,30 @@ namespace KenshiUtilities
         {
             string modpath = Path.GetDirectoryName(mod.getModFilePath())!;
             return Directory.GetFiles(modpath, "*.*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(modpath, f)).ToArray();
+        }
+        private async void SeekModVersions_Click(object? sender, EventArgs e)
+        {
+            await Task.Run(() =>
+            {
+                foreach (var mod in ModUtilitiesCache)
+                {
+                    ModUtilitiesCache[mod.Key].findVersions();
+                    modsListView.BeginInvoke(new Action(() =>
+                    {
+                        var item = modsListView.Items
+                            .Cast<ListViewItem>()
+                            .FirstOrDefault(i => ((ModItem)i.Tag!).Name == mod.Key.Name);
+
+                        if (item != null)
+                        {
+                            ModItemUtility mu = ModUtilitiesCache[mod.Key];
+                            item.SubItems[3].ForeColor = mu.getColorVersions();
+                        }
+                    }));
+                }
+                
+            });
+            RefreshColumn(3);
         }
         
         private async void SeekFileConflictsButton_Click(object? sender, EventArgs e)
