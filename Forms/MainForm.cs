@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Drawing.Interop;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
@@ -79,10 +80,7 @@ namespace KenshiUtilities
             AddButton("Refresh File Overrides", SeekFileConflictsButton_Click);
             AddButton("Refresh Mod Overrides", SeekModConflictsButton_Click);
             this.Width = 1000;
-
-            
-            // Clear whatever ProtoMainForm added
-            //listHost.Controls.Clear();
+            this.Height = 600;
 
             var listContainer = new Panel{Dock = DockStyle.Fill};
             listContainer.Controls.Add(modsListView);
@@ -117,12 +115,17 @@ namespace KenshiUtilities
             this.Resize += MainForm_Resize;
             conflictFileCache=LoadConflictCache(ConflictFileCachepath);
             conflictModCache=LoadConflictCache(ConflictModCachepath);
-            modsListView.SelectedIndexChanged += ModsListView_SelectedIndexChanged;
 
             AddColumn("File Overlaps", mod => getNumberFileOverlaps(mod));
             AddColumn("Mod Record Override", mod => getNumberRecordOverride(mod));
             AddColumn("is Workshop newer?", mod => getVersions(mod));
             AddButton("Refresh Versions", SeekModVersions_Click);
+
+            AddToggle("Show File overrides", (mod)=>ShowConflictsForSelectedMod(mod,conflictFileCache, fileConflictIndicator, Color.Yellow, Color.LightYellow));
+            AddToggle("Show Mod Record overrides", (mod) => ShowConflictsForSelectedMod(mod,conflictModCache, modConflictIndicator, Color.Red, Color.IndianRed));
+            AddToggle("Show Header", (mod) => ShowHeader(mod));
+            AddToggle("Show Records", (mod) => ShowRecords(mod));
+            AddToggle("Show not found dependencies", (mod) => ShowNotFoundDependencies(mod));
         }
         protected override async void OnShown(EventArgs e)
         {
@@ -190,12 +193,43 @@ namespace KenshiUtilities
             }
             return total;
         }
-        private void ModsListView_SelectedIndexChanged(object? sender, EventArgs? e)
+        private void ShowHeader(ModItem mod)
         {
-            getLogForm().Reset();
-            ShowConflictsForSelectedMod(conflictFileCache, fileConflictIndicator,Color.Yellow,Color.LightYellow);
-            ShowConflictsForSelectedMod(conflictModCache, modConflictIndicator,Color.Red, Color.IndianRed);
-            modsListView.Refresh();
+            ReverseEngineer re = new ReverseEngineer();
+            re.LoadModFile(mod.getModFilePath()!);
+            List<(string Text, Color Color)> bs = re.GetHeaderAsBlocks();
+            var logform = getLogForm();
+            InitializeProgress(0, bs.Count);
+            logform.LogBlocks(bs, (done, label) => ReportProgress(done, label));
+        }
+        private void ShowRecords(ModItem mod)
+        {
+            ReverseEngineer re = new ReverseEngineer();
+            re.LoadModFile(mod.getModFilePath()!);
+            List<(string Text, Color Color)> bs = re.GetRecordsAsBlocks();
+            var logform = getLogForm();
+            InitializeProgress(0, bs.Count);
+            logform.LogBlocks(bs, (done, label) => ReportProgress(done, label));
+        }
+        private void ShowNotFoundDependencies(ModItem mod)
+        {
+            var logform = getLogForm();
+            ReverseEngineer re = new ReverseEngineer();
+            re.LoadModFile(mod.getModFilePath()!);
+            List<(string Text, Color Color)> bs = new();
+            List<string> notfounddeps = new();
+            foreach (string d in re.getDependencies())
+            {
+                mergedMods.TryGetValue(d, out var m);
+                if (m == null)
+                {
+                    notfounddeps.Add(d);
+                }
+            }
+            bs.Add(("not found Dependencies: " + (notfounddeps.Count == 0 ? "none" : string.Join("|", notfounddeps)), Color.Red));
+
+            InitializeProgress(0, bs.Count);
+            logform.LogBlocks(bs, (done, label) => ReportProgress(done, label));
         }
         public string[] GetAllFiles(ModItem mod)
         {
@@ -251,19 +285,18 @@ namespace KenshiUtilities
             {
                 lookupModAnalysis = mods.ToDictionary(m => m, m => new ModAnalysis(m));
             }
-            Func<ModItem, ModItem, List<string>> conflictFunc = (modA, modB) => ModAnalysis.GetConflictingRecords(lookupModAnalysis![modA], lookupModAnalysis![modB]);
-            //await Task.Run(() => BuildConflictCache(conflictModCache, ConflictModCachepath, mods, GetOverlappingMods));
+            Func<ModItem, ModItem, List<string>> conflictFunc = (modA, modB) => ModAnalysis.GetOverlappingNewRecords(lookupModAnalysis![modA], lookupModAnalysis![modB]);
             await Task.Run(() => BuildConflictCache(conflictModCache, ConflictModCachepath, mods, conflictFunc));
             ModsListView_SelectedIndexChanged(null, null);
             TryInitialize();
         }
-        
-        private void ShowConflictsForSelectedMod(Dictionary<(string, string), List<string>> conflictCache, ConflictIndicatorPanel conflict_panel,Color main,Color secondary)
+
+        private void ShowConflictsForSelectedMod(ModItem mod,Dictionary<(string, string), List<string>> conflictCache, ConflictIndicatorPanel conflict_panel,Color main,Color secondary)
         {
             if (modsListView.SelectedItems.Count == 0)
                 return;
-            
-            var selectedMod = getSelectedMod();
+
+            var selectedMod = mod;
             var conflictIndices = new List<int>();
             var logForm = getLogForm();
 
@@ -299,7 +332,8 @@ namespace KenshiUtilities
             conflict_panel.UpdateConflicts(conflictIndices, modsListView.Items.Count);
             
         }
-        
+
+
         private void SaveConflictCache(Dictionary<(string, string), List<string>> cache, string path)
         {
             using var writer = new StreamWriter(path);

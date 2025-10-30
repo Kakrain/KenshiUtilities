@@ -2,7 +2,6 @@
 bin/
 obj/
 out/
-obj\
 
 # Visual Studio user-specific files
 .vs/

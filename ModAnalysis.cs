@@ -17,7 +17,7 @@ namespace KenshiUtilities
             Engineer = new ReverseEngineer();
             Engineer.LoadModFile(mod.getModFilePath()!);
 
-            RecordLookup = Engineer.modData.Records!
+            RecordLookup = Engineer.modData.Records!.Where(r=>r.isNew())
                 .ToDictionary(r => r.StringId, r => r);
             RecordChangedFields = Engineer.modData.Records!
             .ToDictionary(
@@ -25,7 +25,25 @@ namespace KenshiUtilities
                 r => r.getChangedFields()
             );
         }
-        public static List<string> GetOverlappingRecords(ModAnalysis A, ModAnalysis B)
+        public static List<string> GetOverlappingNewRecords(ModAnalysis A, ModAnalysis B)
+        {
+            var overlaps = new List<string>();
+
+            foreach (var ra in A.Engineer.modData.Records!.Where(r => r.isNew()))
+            {
+                if (B.RecordLookup.TryGetValue(ra.StringId, out var rb))
+                {
+                    overlaps.Add(
+                        $"{ra.Name}|{ra.StringId}|{ra.getRecordType()}" +
+                        $"[info score: {ra.GetRecordCompleteness()}] " +
+                        $"vs [info score: {rb.GetRecordCompleteness()}]"
+                    );
+                }
+            }
+
+            return overlaps;
+        }
+        /*public static List<string> GetOverlappingRecords(ModAnalysis A, ModAnalysis B)
         {
             var overlaps = new List<string>();
 
@@ -35,21 +53,19 @@ namespace KenshiUtilities
                 {
                     overlaps.Add(
                         $"{ra.Name}|{ra.StringId}|" +
-                        $"[{ra.getModType()}|{ra.getChangeType()}] " +
-                        $"vs [{rb.getModType()}|{rb.getChangeType()}]"
+                        $"[{ra.getRecordType()}|{ra.getChangeType()}] " +
+                        $"vs [{rb.getRecordType()}|{rb.getChangeType()}]"
                     );
                 }
             }
 
             return overlaps;
         }
-
-        // Conflict = both mods change the same field of the same record
         public static List<string> GetConflictingRecords(ModAnalysis A, ModAnalysis B)
         {
             var conflicts = new List<string>();
 
-            foreach (var ra in A.Engineer.modData.Records!)
+            foreach (var ra in A.Engineer.modData.Records!.Where(r=>r.isNew()))
             {
                 if (B.RecordLookup.TryGetValue(ra.StringId, out var rb))
                 {
@@ -66,6 +82,6 @@ namespace KenshiUtilities
             }
 
             return conflicts;
-        }
+        }*/
     }
 }
