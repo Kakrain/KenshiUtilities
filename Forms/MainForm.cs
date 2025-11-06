@@ -80,7 +80,7 @@ namespace KenshiUtilities
             AddButton("Refresh File Overrides", SeekFileConflictsButton_Click);
             AddButton("Refresh Mod Overrides", SeekModConflictsButton_Click);
             this.Width = 1000;
-            this.Height = 600;
+            this.Height = 700;
 
             var listContainer = new Panel{Dock = DockStyle.Fill};
             listContainer.Controls.Add(modsListView);
@@ -197,26 +197,21 @@ namespace KenshiUtilities
         {
             ReverseEngineer re = new ReverseEngineer();
             re.LoadModFile(mod.getModFilePath()!);
-            List<(string Text, Color Color)> bs = re.GetHeaderAsBlocks();
             var logform = getLogForm();
-            InitializeProgress(0, bs.Count);
-            logform.LogBlocks(bs, (done, label) => ReportProgress(done, label));
+            logform.LogString(re.GetHeaderAsString(),Color.Orange);
         }
         private void ShowRecords(ModItem mod)
         {
             ReverseEngineer re = new ReverseEngineer();
             re.LoadModFile(mod.getModFilePath()!);
-            List<(string Text, Color Color)> bs = re.GetRecordsAsBlocks();
             var logform = getLogForm();
-            InitializeProgress(0, bs.Count);
-            logform.LogBlocks(bs, (done, label) => ReportProgress(done, label));
+            logform.LogString(re.GetRecordsAsString());
         }
         private void ShowNotFoundDependencies(ModItem mod)
         {
             var logform = getLogForm();
             ReverseEngineer re = new ReverseEngineer();
             re.LoadModFile(mod.getModFilePath()!);
-            List<(string Text, Color Color)> bs = new();
             List<string> notfounddeps = new();
             foreach (string d in re.getDependencies())
             {
@@ -226,10 +221,7 @@ namespace KenshiUtilities
                     notfounddeps.Add(d);
                 }
             }
-            bs.Add(("not found Dependencies: " + (notfounddeps.Count == 0 ? "none" : string.Join("|", notfounddeps)), Color.Red));
-
-            InitializeProgress(0, bs.Count);
-            logform.LogBlocks(bs, (done, label) => ReportProgress(done, label));
+            logform.LogString("not found Dependencies: " + (notfounddeps.Count == 0 ? "none" : string.Join("|", notfounddeps)),Color.Red);
         }
         public string[] GetAllFiles(ModItem mod)
         {
@@ -301,7 +293,8 @@ namespace KenshiUtilities
             var logForm = getLogForm();
 
             modsListView.BeginUpdate();
-            var blocks = new List<(string, Color)>();
+            //var blocks = new List<(string, Color)>();
+            StringBuilder conflicts = new StringBuilder();
             foreach (ListViewItem item in modsListView.Items)
             {
                 string mod1 = selectedMod.Name;
@@ -315,11 +308,11 @@ namespace KenshiUtilities
                     item.ForeColor = hasConflict ? Color.Red : Color.Black;
                     if (hasConflict) { 
                         conflictIndices.Add(item.Index);
-                        blocks.Add(($"[{selectedMod.Name}] vs [{item.Text}]", main));
+                        conflicts.AppendLine(($"[{selectedMod.Name}] vs [{item.Text}]"));
                         var sb = new StringBuilder();
                         foreach (var ov in overlap)
                             sb.AppendLine($"{ov}");
-                        blocks.Add((sb.ToString(), secondary));
+                        conflicts.AppendLine((sb.ToString()));
                     }
                 }
                 else
@@ -327,7 +320,7 @@ namespace KenshiUtilities
                     item.ForeColor = Color.Black;
                 }
             }
-            logForm.LogBlocks(blocks);
+            logForm.LogString(conflicts.ToString(),secondary);
             modsListView.EndUpdate();
             conflict_panel.UpdateConflicts(conflictIndices, modsListView.Items.Count);
             
