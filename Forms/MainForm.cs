@@ -73,6 +73,9 @@ namespace KenshiUtilities
         private const string ConflictModCachepath = "conflict_cache_mod.txt";
         private Dictionary<ModItem, ModAnalysis>? lookupModAnalysis = null;
         private Dictionary<ModItem, HashSet<string>>? lookupFiles = null;
+
+        private TextBox searchTextBox;
+        private Button searchButton;
         public MainForm()
         {
             Text = "Kenshi Utilities";
@@ -126,6 +129,85 @@ namespace KenshiUtilities
             AddToggle("Show Header", (mod) => ShowHeader(mod));
             AddToggle("Show Records", (mod) => ShowRecords(mod));
             AddToggle("Show not found dependencies", (mod) => ShowNotFoundDependencies(mod));
+
+
+            searchTextBox = new TextBox
+            {
+                PlaceholderText = "Search string in all mods...",
+                Width = 200,
+                Location = new Point(10, 10)
+            };
+
+            searchButton = new Button
+            {
+                Text = "Search",
+                Location = new Point(220, 8),
+                Height = 32,
+                Margin = new Padding(4),
+            };
+
+            searchButton.Click += SearchButton_Click;
+
+            // Add to form
+            buttonPanel.Controls.Add(searchTextBox);
+            buttonPanel.Controls.Add(searchButton);
+        }
+        private void HighlightModItem(ListViewItem item)
+        {
+            item.BackColor = Color.Yellow;
+            item.ForeColor = Color.Black;
+        }
+
+        private void ClearHighlight(ListViewItem item)
+        {
+            item.BackColor = SystemColors.Window;
+            item.ForeColor = SystemColors.WindowText;
+        }
+        private void SearchButton_Click(object? sender, EventArgs e)
+        {
+            string query = searchTextBox.Text.Trim();
+            if (string.IsNullOrEmpty(query))
+                return;
+            foreach (ListViewItem it in modsListView.Items)
+                ClearHighlight(it);
+
+            modsListView.BeginUpdate();
+
+            foreach (ListViewItem item in modsListView.Items)
+            {
+                if (item.Tag is not ModItem mod)
+                    continue;
+                if (BinaryContains(mod.getModFilePath()!,query))  
+                {
+                    HighlightModItem(item);
+                }
+            }
+            modsListView.EndUpdate();
+            modsListView.Refresh();
+        }
+        bool BinaryContains(string filePath, string search)
+        {
+            byte[] data = File.ReadAllBytes(filePath);
+            byte[] pattern = Encoding.UTF8.GetBytes(search);
+
+            // naive search (fast enough for small files)
+            for (int i = 0; i <= data.Length - pattern.Length; i++)
+            {
+                bool match = true;
+                for (int j = 0; j < pattern.Length; j++)
+                {
+                    if (data[i + j] != pattern[j])
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match)
+                    return true;
+            }
+
+            return false;
         }
         protected override async void OnShown(EventArgs e)
         {
