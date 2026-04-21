@@ -2,7 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using KenshiCore;
+using KenshiCore.Mods;
+using KenshiCore.ReverseEngineering;
 using System.Threading.Tasks;
 
 namespace KenshiUtilities

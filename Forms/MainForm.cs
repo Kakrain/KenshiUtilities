@@ -1,4 +1,6 @@
-﻿using KenshiCore;
+﻿using KenshiCore.UI;
+using KenshiCore.Mods;
+using KenshiCore.ReverseEngineering;
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -67,19 +69,30 @@ namespace KenshiUtilities
         private Dictionary<(string, string), List<string>> conflictFileCache = new();
         private Dictionary<(string, string), List<string>> conflictModCache = new();
 
-        private Dictionary<ModItem, ModItemUtility> ModUtilitiesCache = new();
+        //private Dictionary<ModItem, ModItemUtility> ModUtilitiesCache = new();
+        private Dictionary<string, ModItemUtility> ModUtilitiesCache = new();
 
         private const string ConflictFileCachepath = "conflict_cache_file.txt";
         private const string ConflictModCachepath = "conflict_cache_mod.txt";
-        private Dictionary<ModItem, ModAnalysis>? lookupModAnalysis = null;
-        private Dictionary<ModItem, HashSet<string>>? lookupFiles = null;
+        //private Dictionary<ModItem, ModAnalysis>? lookupModAnalysis = null;
+        //private Dictionary<ModItem, HashSet<string>>? lookupFiles = null;
+        private Dictionary<string, ModAnalysis>? lookupModAnalysis = null;
+        private Dictionary<string, HashSet<string>>? lookupFiles = null;
 
         private TextBox searchTextBox;
         private Button searchButton;
+        //TODO: toggles are not working now.
         public MainForm()
         {
             Text = "Kenshi Utilities";
-            setColors(Color.SteelBlue, Color.SkyBlue);
+
+            ThemeManager.Set(
+                new AppTheme
+                {
+                    Background = Color.SteelBlue,
+                    Secondary = Color.SkyBlue,
+                    Foreground = Color.Black
+                });
             AddButton("Refresh File Overrides", SeekFileConflictsButton_Click);
             AddButton("Refresh Mod Overrides", SeekModConflictsButton_Click);
             this.Width = 1000;
@@ -157,7 +170,16 @@ namespace KenshiUtilities
             item.BackColor = Color.Yellow;
             item.ForeColor = Color.Black;
         }
+        protected override void LoadMods()
+        {
+            var repo = ModRepository.Instance;
 
+            //repo.LoadBaseGameMods(Path.Combine(ModManager.kenshiPath!, "data"));
+            repo.LoadGameDirMods();// ModManager.gamedirModsPath!);
+            repo.LoadWorkshopMods();// ModManager.workshopModsPath!);
+            repo.LoadSelectedMods();// Path.Combine(ModManager.kenshiPath!, "data", "mods.cfg"));
+            //repo.excludeUnselectedMods = true;
+        }
         private void ClearHighlight(ListViewItem item)
         {
             item.BackColor = SystemColors.Window;
@@ -220,13 +242,13 @@ namespace KenshiUtilities
                 await InitializationTask;
             foreach (var mod in mergedMods)
             {
-                ModUtilitiesCache[mod.Value] = new ModItemUtility(mod.Value);
+                ModUtilitiesCache[mod.Value.Name] = new ModItemUtility(mod.Value);
             }
         }
         private string getVersions(ModItem mod)
         {
-            if (ModUtilitiesCache.ContainsKey(mod))
-                return ModUtilitiesCache[mod].getVersionString();
+            if (ModUtilitiesCache.ContainsKey(mod.Name))
+                return ModUtilitiesCache[mod.Name].getVersionString();
             return "_|_";
         }
         private void MainForm_Resize(object? sender, EventArgs e)
@@ -303,11 +325,13 @@ namespace KenshiUtilities
                     notfounddeps.Add(d);
                 }
             }
-            logform.LogString("not found Dependencies: " + (notfounddeps.Count == 0 ? "none" : string.Join("|", notfounddeps)),Color.Red);
+            logform.LogString("not found Dependencies: " + (notfounddeps.Count == 0 ? "none" : string.Join("|", notfounddeps))+"\n",Color.Red);
         }
         public string[] GetAllFiles(ModItem mod)
         {
-            string modpath = Path.GetDirectoryName(mod.getModFilePath())!;
+            string modpath = Path.GetDirectoryName(mod.getModFilePath())!;//modpath is  null when a mod is deleted.
+            if(!Directory.Exists(modpath))
+                return Array.Empty<string>();
             return Directory.GetFiles(modpath, "*.*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(modpath, f)).ToArray();
         }
         private async void SeekModVersions_Click(object? sender, EventArgs e)
@@ -321,7 +345,7 @@ namespace KenshiUtilities
                     {
                         var item = modsListView.Items
                             .Cast<ListViewItem>()
-                            .FirstOrDefault(i => ((ModItem)i.Tag!).Name == mod.Key.Name);
+                            .FirstOrDefault(i => ((ModItem)i.Tag!).Name == mod.Key);
 
                         if (item != null)
                         {
@@ -338,11 +362,9 @@ namespace KenshiUtilities
         private async void SeekFileConflictsButton_Click(object? sender, EventArgs e)
         {
             var mods = modsListView.Items.Cast<ListViewItem>().Select(item => (ModItem)item.Tag!).ToList();
-            var totalPairs = mods.Count * (mods.Count - 1) / 2;
-            InitializeProgress(0, totalPairs);
             if (lookupFiles == null)
             {
-                lookupFiles = mods.ToDictionary(m => m, m => new HashSet<string>(GetAllFiles(m)));
+                lookupFiles = mods.ToDictionary(m => m.Name, m => new HashSet<string>(GetAllFiles(m)));
             }
 
             await Task.Run(() => BuildConflictCache(conflictFileCache, ConflictFileCachepath, mods, GetOverlappingFiles));
@@ -352,14 +374,12 @@ namespace KenshiUtilities
         private async void SeekModConflictsButton_Click(object? sender, EventArgs e)
         {
             var mods = modsListView.Items.Cast<ListViewItem>().Select(item => (ModItem)item.Tag!).ToList();
-            var totalPairs = mods.Count * (mods.Count - 1) / 2;
-            InitializeProgress(0, totalPairs);
 
             if (lookupModAnalysis == null)
             {
-                lookupModAnalysis = mods.ToDictionary(m => m, m => new ModAnalysis(m));
+                lookupModAnalysis = mods.ToDictionary(m => m.Name, m => new ModAnalysis(m));
             }
-            Func<ModItem, ModItem, List<string>> conflictFunc = (modA, modB) => ModAnalysis.GetOverlappingNewRecords(lookupModAnalysis![modA], lookupModAnalysis![modB]);
+            Func<ModItem, ModItem, List<string>> conflictFunc = (modA, modB) => ModAnalysis.GetOverlappingNewRecords(lookupModAnalysis![modA.Name], lookupModAnalysis![modB.Name]);
             await Task.Run(() => BuildConflictCache(conflictModCache, ConflictModCachepath, mods, conflictFunc));
             ModsListView_SelectedIndexChanged(null, null);
             TryInitialize();
@@ -375,7 +395,6 @@ namespace KenshiUtilities
             var logForm = getLogForm();
 
             modsListView.BeginUpdate();
-            //var blocks = new List<(string, Color)>();
             StringBuilder conflicts = new StringBuilder();
             foreach (ListViewItem item in modsListView.Items)
             {
@@ -405,10 +424,7 @@ namespace KenshiUtilities
             logForm.LogString(conflicts.ToString(),secondary);
             modsListView.EndUpdate();
             conflict_panel.UpdateConflicts(conflictIndices, modsListView.Items.Count);
-            
         }
-
-
         private void SaveConflictCache(Dictionary<(string, string), List<string>> cache, string path)
         {
             using var writer = new StreamWriter(path);
@@ -443,7 +459,10 @@ namespace KenshiUtilities
         {
             var newCache = new ConcurrentDictionary<(string, string), List<string>>();
             int processed = 0;
+            var totalPairs = mods.Count * (mods.Count - 1) / 2;
 
+            ProgressController progress = ProgressController.Instance;
+            progress.Initialize(totalPairs);
             Parallel.For(0, mods.Count, i =>
             {
                 for (int j = i + 1; j < mods.Count; j++)
@@ -462,13 +481,11 @@ namespace KenshiUtilities
 
                         newCache[key] = overlap;
                     }
-                    int done = Interlocked.Increment(ref processed);
-                    if (done % 100 == 0)
-                        ReportProgress(done, $"processing {mod1.Name} vs {mod2.Name}");
+                    progress.Report(++processed, $"processing {mod1.Name} vs {mod2.Name}");
 
                 }
             });
-            ReportProgress(processed, $"Finished");
+            progress.Finish();
             cache.Clear();
             foreach (var kvp in newCache)
             {
@@ -478,8 +495,8 @@ namespace KenshiUtilities
         }
         private List<string> GetOverlappingFiles(ModItem modA, ModItem modB)
         {
-            var smaller = lookupFiles![modA];
-            var larger = lookupFiles[modB];
+            var smaller = lookupFiles![modA.Name];
+            var larger = lookupFiles[modB.Name];
 
             // Always iterate the smaller set
             if (smaller.Count > larger.Count)

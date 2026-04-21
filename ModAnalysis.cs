@@ -1,4 +1,7 @@
-﻿using KenshiCore;
+﻿using KenshiCore.Mods;
+using KenshiCore.ReverseEngineering;
+using KenshiCore.UI;
+using KenshiCore.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,10 +18,16 @@ namespace KenshiUtilities
         public ModAnalysis(ModItem mod)
         {
             Engineer = new ReverseEngineer();
-            Engineer.LoadModFile(mod.getModFilePath()!);
-
-            RecordLookup = Engineer.modData.Records!.Where(r=>r.isNew())
-                .ToDictionary(r => r.StringId, r => r);
+            string? modpath= mod.getModFilePath();
+            if (!File.Exists(modpath))
+            {
+                Engineer.InitializeEmptyMod();
+            }
+            else
+            {
+                Engineer.LoadModFile(mod.getModFilePath()!);
+            }
+            RecordLookup = Engineer.modData.Records!.Where(r=>r.isNew()).ToDictionary(r => r.StringId, r => r);
             RecordChangedFields = Engineer.modData.Records!
             .ToDictionary(
                 r => r.StringId,
@@ -43,45 +52,5 @@ namespace KenshiUtilities
 
             return overlaps;
         }
-        /*public static List<string> GetOverlappingRecords(ModAnalysis A, ModAnalysis B)
-        {
-            var overlaps = new List<string>();
-
-            foreach (var ra in A.Engineer.modData.Records!)
-            {
-                if (B.RecordLookup.TryGetValue(ra.StringId, out var rb))
-                {
-                    overlaps.Add(
-                        $"{ra.Name}|{ra.StringId}|" +
-                        $"[{ra.getRecordType()}|{ra.getChangeType()}] " +
-                        $"vs [{rb.getRecordType()}|{rb.getChangeType()}]"
-                    );
-                }
-            }
-
-            return overlaps;
-        }
-        public static List<string> GetConflictingRecords(ModAnalysis A, ModAnalysis B)
-        {
-            var conflicts = new List<string>();
-
-            foreach (var ra in A.Engineer.modData.Records!.Where(r=>r.isNew()))
-            {
-                if (B.RecordLookup.TryGetValue(ra.StringId, out var rb))
-                {
-                    var aFields = A.RecordChangedFields[ra.StringId];
-                    var bFields = B.RecordChangedFields[rb.StringId];
-
-                    foreach (var f in aFields.Intersect(bFields))
-                    {
-                        conflicts.Add(
-                            $"{ra.Name}|{ra.StringId}|Field '{f}' modified differently"
-                        );
-                    }
-                }
-            }
-
-            return conflicts;
-        }*/
     }
 }
